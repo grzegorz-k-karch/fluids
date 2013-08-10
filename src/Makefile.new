@@ -1,0 +1,29 @@
+PROGRAM = ../bin/fluids
+TARGETS = compute/compute.o render/render.o simulate/simulate.o fluids/fluids.o
+#TARGETS = compute.o render.o simulate.o fluids.o
+SUBDIRS = compute render simulate fluids
+
+$(PROGRAM): $(TARGETS)
+	g++ -o $(PROGRAM) $(TARGETS)
+
+$(TARGETS): $(SUBDIRS)
+
+$(SUBDIRS):
+	cd $@ && $(MAKE)
+
+#.PHONY: subdirs $(SUBDIRS)
+
+#subdirs: $(SUBDIRS)
+
+#$(SUBDIRS):
+#	cd $@ && $(MAKE)
+
+.PHONY : clean
+clean:
+	rm -f $(PROGRAM) *.o *~
+	cd ./compute; make clean
+	cd ./render; make clean
+	cd ./simulate; make clean
+	cd ./fluids; make clean
+
+#$(TARGETS): $(SUBDIRS)
