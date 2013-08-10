@@ -13,8 +13,9 @@ fluids/fluids.o
 NVCC = nvcc
 LIBS = -lGL -lglut -ldl -lX11
 
-CXXFLAGS = -O3
-NVCCFLAGS = -O3
+CXXFLAGS = 
+NVCCFLAGS = 
+
 
 .PHONY: all
 all: $(PROGRAM)
