@@ -268,9 +268,22 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
     veloUpdate -= scale*p[threadIdx.x];
 
     int gidv = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*volumeSize.y;
-    velo[gidv] = veloUpdate;
+    velo[gidv] = 1.0f;//veloUpdate;
   }
 }
+//==============================================================================
+// Since the data is not aligned in y and z direction, kernel Y and Z will
+// process pressure updates as x-y or x-z blocks to minimize memory penalty
+// due to y and z memory strides
+#define BLOCK_SIZE_X 16
+#define BLOCK_SIZE_Y 16
+// TODO: use profiling to find optimum, check for different compute capabilities
+__global__
+void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
+{
+
+}
+//==============================================================================
 #if 0
 __global__
 void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
@@ -577,33 +590,26 @@ void Compute::PressureUpdate_kernel()
 {
   int numThreads;
   int numBlocks;
-  // int numBlocksX;
+  int numBlocksX;
+  int numBlocksY;
+  int numBlocksZ;
 
+  // X--------------------------------------------------------------------------
   // TODO: compute block size according to the volume size
   // TODO: multiple blocks in x direction, if necessary
   numThreads = BLOCK_SIZE;
-  // numBlocksX = 1;
-  numBlocks = DataInfo->resolution[1]*DataInfo->resolution[2];//*numBlocksX;
-
+  numBlocks = DataInfo->resolution[1]*DataInfo->resolution[2];
   g_PressureUpdateX<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityX);
 
-  // int numThreads;
-  // int numBlocks;
-  // cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
+  // Y--------------------------------------------------------------------------
+  numThreads = BLOCK_SIZE_X*BLOCK_SIZE_Y;
+  numBlocksX = myDivUp(DataInfo->resolution[0], BLOCK_SIZE_X);
+  numBlocksY = myDivUp(DataInfo->resolution[1]-1, BLOCK_SIZE_Y);
+  numBlocks = numBlocksX*numBlocksY*(DataInfo->resolution[2]);
+  g_PressureUpdateY<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityY);
 
-  // numThreads = BLOCK_SIZE;
-  // numBlocks = myDivUp(NumCellFaces[0], numThreads);
-  // g_PressureUpdateX<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityX);
-
-  // // For y and z use the pressure resolution; the threads at the bottom (y) and
-  // // at the back (z) will take care of updating the bottommost (y) and furthest
-  // // (z) faces.
-  // numThreads = BLOCK_SIZE_X*BLOCK_SIZE_Y;
-  // int numThreadBlocksX = myDivUp(DataInfo->resolution[0], BLOCK_SIZE_X);
-  // int numThreadBlocksY = myDivUp(DataInfo->resolution[1], BLOCK_SIZE_Y);
-  // numBlocks = numThreadBlocksX*numThreadBlocksY*(DataInfo->resolution[2]);
-  // g_PressureUpdateY<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityY);
-
-  // // numBlocks = myDivUp(NumCellFaces[2], numThreads);
-  // // g_PressureUpdateZ<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityZ);
+  // Z--------------------------------------------------------------------------
+  // numBlocksZ = myDivUp(DataInfo->resolution[2]-1, BLOCK_SIZE_Y);
+  // numBlocks = numBlocksX*numBlocksZ*(DataInfo->resolution[1]);
+  // g_PressureUpdateZ<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityZ);
 }

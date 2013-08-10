@@ -244,6 +244,6 @@ void Compute::PressureUpdate()
   PressureUpdate_kernel();
 
   UpdateCudaArray(ca_VelocityX, Res[0], VelocityX);
-  // UpdateCudaArray(ca_VelocityY, Res[1], VelocityY);
+  UpdateCudaArray(ca_VelocityY, Res[1], VelocityY);
   // UpdateCudaArray(ca_VelocityZ, Res[2], VelocityZ);
 }
