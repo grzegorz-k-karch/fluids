@@ -150,11 +150,11 @@ void Compute::SetBoundaryConditions()
 //==============================================================================
 void Compute::Update()
 {
+  SetTimestep(ComputeTimestep());
   //  SetBoundaryConditions();
   ComputeDivergence();
   // //Projection();
   PressureUpdate();
-  SetTimestep(ComputeTimestep());
   AdvectDye();
   AdvectVelocity();
 }
@@ -236,7 +236,6 @@ float Compute::ComputeTimestep()
   else {
     dt = 0.0f;
   }
-
   return dt;
 }
 //==============================================================================

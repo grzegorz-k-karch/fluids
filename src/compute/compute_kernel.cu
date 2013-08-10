@@ -225,8 +225,6 @@ void g_InitVelocity(float* veloX, float* veloY, float* veloZ, dim3 volumeSize)
   // X
   if (gid < sizeX) {
     int x = gid%(volumeSize.x+1);
-    int y = (gid/(volumeSize.x+1))%volumeSize.y;
-    int z = gid/((volumeSize.x+1)*volumeSize.y);
     if (x == 0) {
       veloX[gid] = 1.0f;
     }
@@ -246,9 +244,6 @@ void g_InitVelocity(float* veloX, float* veloY, float* veloZ, dim3 volumeSize)
 //==============================================================================
 #define BLOCK_SIZE 64
 //==============================================================================
-// 0 1 2 3 4 5 6 7 8
-// | | | | | | | | |
-//  0 1 2 3 4 5 6 7
 __global__
 void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
 {
@@ -265,16 +260,16 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
 
   // first thread in each block doesn't take part in the game
   if (x > 0 && x < volumeSize.x) {
-    veloUpdate = tex3D(veloXTex, x+0.5f, y+0.5f, z+0.5f);
 
+    float veloUpdate = tex3D(veloXTex, x+0.5f, y+0.5f, z+0.5f);
     float scale = -c_dt*c_rdx*c_rrho;
+
     veloUpdate += scale*p[threadIdx.x-1];
     veloUpdate -= scale*p[threadIdx.x];
 
-    int gidv = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*(volumeSize.y+1);
+    int gidv = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*volumeSize.y;
     velo[gidv] = veloUpdate;
   }
-
 }
 #if 0
 __global__
@@ -549,11 +544,12 @@ void Compute::InitTextures()
 //==============================================================================
 void Compute::InitSymbols()
 {
+  // TODO: check dimensions!!
   float rdx = 1.0f/(DataInfo->spacing[0]);
   myCudaCall(cudaMemcpyToSymbol(c_rdx, &rdx, sizeof(float), 0,
   				cudaMemcpyHostToDevice), __LINE__, __FILE__);
   float rho = 997.7735; // [kg/m^3] water density at 22 degrees Celsius
-  float rrho = 1.0f/(rrho);
+  float rrho = 1.0f/rho;
   myCudaCall(cudaMemcpyToSymbol(c_rrho, &rrho, sizeof(float), 0,
   				cudaMemcpyHostToDevice), __LINE__, __FILE__);
 }
@@ -581,13 +577,13 @@ void Compute::PressureUpdate_kernel()
 {
   int numThreads;
   int numBlocks;
-  int numBlocksX;
+  // int numBlocksX;
 
   // TODO: compute block size according to the volume size
   // TODO: multiple blocks in x direction, if necessary
   numThreads = BLOCK_SIZE;
-  numBlocksX = 1;
-  numBlocks = DataInfo->resolution[1]*DataInfo->resolution[2]*numBlocksX;
+  // numBlocksX = 1;
+  numBlocks = DataInfo->resolution[1]*DataInfo->resolution[2];//*numBlocksX;
 
   g_PressureUpdateX<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityX);
 
