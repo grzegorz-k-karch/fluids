@@ -264,11 +264,11 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
     float veloUpdate = tex3D(veloXTex, x+0.5f, y+0.5f, z+0.5f);
     float scale = -c_dt*c_rdx*c_rrho;
 
-    veloUpdate += scale*p[threadIdx.x-1];
-    veloUpdate -= scale*p[threadIdx.x];
+    veloUpdate += scale*p[threadIdx.x];
+    veloUpdate -= scale*p[threadIdx.x-1];
 
     gid = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*volumeSize.y;
-    velo[gid] = 1.0f;//veloUpdate;
+    velo[gid] = 0.0f;//veloUpdate;
   }
 }
 //==============================================================================
@@ -310,174 +310,53 @@ void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
     float veloUpdate = tex3D(veloXTex, x+0.5f, y+1.0f+0.5f, z+0.5f);
     float scale = -c_dt*c_rdx*c_rrho;
 
-    veloUpdate += scale*p[ly][lx];
+    veloUpdate += scale*p[ly+1][lx];
     veloUpdate -= scale*p[ly][lx];
 
-    gid = x + (y+1.0f)*volumeSize.x + z*volumeSize.x*(volumeSize.y+1);
-    velo[gid] = 1.0f;//veloUpdate;
-  }
-}
-//==============================================================================
-#if 0
-__global__
-void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
-{
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
-  int x = gid % (volumeSize.x+1);
-  int y = (gid / (volumeSize.x+1)) % volumeSize.y;
-  int z = gid / ((volumeSize.x+1)*volumeSize.y);
-  int gidp = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
-  __shared__ float p[BLOCK_SIZE+1];
-  int numFaces = (volumeSize.x+1)*volumeSize.y*volumeSize.z;
-  float veloUpdate;
-
-  if (gid < numFaces) {
-
-    veloUpdate = tex3D(veloXTex, x+0.5f, y+0.5f, z+0.5f);
-
-    // get pressure to the right of the face
-    if (x < volumeSize.x) {
-
-      p[threadIdx.x+1] = pressure[gidp];
-
-      // if the first face in thread block is not the leftmost face then load
-      // pressure to the right of it
-      if (threadIdx.x == 0 && x > 0) {
-
-  	p[0] = pressure[gidp-1];
-      }
-    }
-  }
-  __syncthreads();
-
-  float scale = -c_dt*c_rdx*c_rrho;
-  if (gid < numFaces) {
-
-    if (x < volumeSize.x) {
-
-      veloUpdate += p[threadIdx.x+1];
-    }
-    if (x > 0) {
-
-      veloUpdate -= p[threadIdx.x];
-    }
-    velo[gid] = veloUpdate;
-  }
-}
-//==============================================================================
-// Since the data is not aligned in y and z direction, kernel Y and Z will
-// process pressure updates as x-y or x-z blocks to minimize memory penalty
-// due to y and z memory strides
-#define BLOCK_SIZE_X 16
-#define BLOCK_SIZE_Y 16
-// TODO: use profiling to find optimum, check for different compute capabilities
-//==============================================================================
-__global__
-void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
-{
-  int numThreadBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
-  int numThreadBlocksY = divUp(volumeSize.y, BLOCK_SIZE_Y);
-  int bIdx = blockIdx.x % numThreadBlocksX;
-  int gx = bIdx * BLOCK_SIZE_X;
-  int bIdy = ((blockIdx.x / numThreadBlocksX) % numThreadBlocksY);
-  int gy = bIdy * BLOCK_SIZE_Y;
-  int lx = threadIdx.x & (BLOCK_SIZE_X-1);
-  int ly = (threadIdx.x / BLOCK_SIZE_X);
-
-  int x = gx + lx;
-  int y = gy + ly;
-  int z = blockIdx.x / (numThreadBlocksX*numThreadBlocksY);
-
-  __shared__ float p[BLOCK_SIZE_Y+1][BLOCK_SIZE_X];
-  float veloUpdate;
-
-  if (x < volumeSize.x && y < volumeSize.y) {
-
-    veloUpdate = tex3D(veloYTex, x+0.5f, y+0.5f, z+0.5f);
-    int gid = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
-    p[ly+1][lx] = pressure[gid];
-
-    if (ly == 0 && y > 0) {
-      p[0][lx] = pressure[gid-volumeSize.x];
-    }
-  }
-  __syncthreads();
-
-  int gidv = x + y*volumeSize.x + z*volumeSize.x*(volumeSize.y+1);
-  float scale = -c_dt*c_rdx*c_rrho;
-  if (x < volumeSize.x && y < volumeSize.y) {
-
-    if (y < volumeSize.y) {
-
-      veloUpdate += p[ly+1][lx];
-    }
-    if (y > 0) {
-
-      veloUpdate -= p[ly][lx];
-    }
-    velo[gidv] = veloUpdate;
-  }
-  // update bottommost face velocities
-  if (y == volumeSize.y-1) {
-
-    y += 1;
-    veloUpdate = tex3D(veloYTex, x+0.5f, y+0.5f, z+0.5f);
-
-    if (x < volumeSize.x) {
-      veloUpdate -= p[ly+1][lx];
-    }
-    gidv = x + y*volumeSize.x + z*volumeSize.x*(volumeSize.y+1);
-    velo[gidv] = veloUpdate;
+    gid = x + (y+1)*volumeSize.x + z*volumeSize.x*(volumeSize.y+1);
+    velo[gid] = 0.0f;//veloUpdate;
   }
 }
 //==============================================================================
 __global__
 void g_PressureUpdateZ(float* pressure, dim3 volumeSize, float* velo)
 {
-  int numThreadBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
-  int numThreadBlocksZ = divUp(volumeSize.z, BLOCK_SIZE_Y);
-  int bIdx = blockIdx.x % numThreadBlocksX;
-  int gx = bIdx * BLOCK_SIZE_X;
-  int bIdz = ((blockIdx.x / numThreadBlocksX) % numThreadBlocksZ);
-  int gz = bIdz * BLOCK_SIZE_Y;
+  int numBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
+  int numBlocksZ = divUp(volumeSize.z-1, BLOCK_SIZE_Y);
   int lx = threadIdx.x & (BLOCK_SIZE_X-1);
-  int lz = (threadIdx.x / BLOCK_SIZE_X);
+  int lz = threadIdx.x/BLOCK_SIZE_X;
+  int bx = (blockIdx.x % numBlocksX)*BLOCK_SIZE_X;
+  int bz = ((blockIdx.x / numBlocksX) % numBlocksZ)*BLOCK_SIZE_Y;
+  int x = bx + lx;
+  int y = blockIdx.x/(numBlocksX*numBlocksZ);
+  int z = bz + lz;
+  __shared__ float p[BLOCK_SIZE_Y+1][BLOCK_SIZE_X];
+  int gid = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
 
-  int x = gx + lx;
-  int y = blockIdx.x / (numThreadBlocksX*numThreadBlocksZ);
-  int z = gz + lz;
+  if (x < volumeSize.x && z < volumeSize.z-1) {
 
-  __shared__ float p[BLOCK_SIZE_Y][BLOCK_SIZE_X];
-  float veloUpdate;
-
-  if (x < volumeSize.x && z < volumeSize.z) {
-
-    veloUpdate = tex3D(veloZTex, x+0.5f, y+0.5f, z+0.5f);
-    int gid = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
-    p[lz+1][lx] = pressure[gid];
-
-    if (lz == 0 && z > 0) {
-      p[0][lx] = pressure[gid-volumeSize.x*volumeSize.y];
+    p[lz][lx] = pressure[gid];
+    if (lz == BLOCK_SIZE_Y-1 && z < volumeSize.z-1) {
+      p[BLOCK_SIZE_Y][lx] = pressure[gid+volumeSize.x*volumeSize.y];
+    }
+    else if (z == volumeSize.z-2) {
+      p[lz+1][lx] = pressure[gid+volumeSize.x*volumeSize.y];
     }
   }
   __syncthreads();
-  // TODO: gid for velocity
-  // TODO: update furthermost and bottommost face velocities!!
-  float scale = -c_dt*c_rdx*c_rrho;
-  if (x < volumeSize.x && z < volumeSize.z) {
 
-    if (z < volumeSize.z) {
+  if (x < volumeSize.x && z < volumeSize.z-1) {
 
-      veloUpdate += p[lz+1][lx];
-    }
-    if (z > 0) {
+    float veloUpdate = tex3D(veloXTex, x+0.5f, y+0.5f, z+1.0f+0.5f);
+    float scale = -c_dt*c_rdx*c_rrho;
 
-      veloUpdate -= p[lz][lx];
-    }
-    velo[gid] = veloUpdate;
+    veloUpdate += scale*p[lz+1][lx];
+    veloUpdate -= scale*p[lz][lx];
+
+    gid = x + y*volumeSize.x + (z+1)*volumeSize.x*volumeSize.y;
+    velo[gid] = 0.0f;//veloUpdate;
   }
 }
-#endif
 //==============================================================================
 void Compute::InitDye_kernel()
 {
@@ -643,7 +522,7 @@ void Compute::PressureUpdate_kernel()
   g_PressureUpdateY<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityY);
 
   // Z--------------------------------------------------------------------------
-  // numBlocksZ = divUp(DataInfo->resolution[2]-1, BLOCK_SIZE_Y);
-  // numBlocks = numBlocksX*numBlocksZ*(DataInfo->resolution[1]);
-  // g_PressureUpdateZ<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityZ);
+  numBlocksZ = divUp(DataInfo->resolution[2]-1, BLOCK_SIZE_Y);
+  numBlocks = numBlocksX*numBlocksZ*(DataInfo->resolution[1]);
+  g_PressureUpdateZ<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityZ);
 }
