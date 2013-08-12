@@ -6,7 +6,7 @@
 
 void myCudaCall(cudaError_t cudaError, int line, char *file);
 
-static __inline__ __device__ __host__ int myDivUp(int a, int b) 
+static __inline__ __device__ __host__ int divUp(int a, int b) 
 { 
   return (a % b != 0) ? (a / b + 1) : (a / b);
 }

@@ -251,10 +251,10 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
   int y = blockIdx.x % volumeSize.y;
   int z = blockIdx.x / volumeSize.y;
   __shared__ float p[BLOCK_SIZE];
-  int gidp = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
+  int gid = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
 
   if (x < volumeSize.x) {
-    p[threadIdx.x] = pressure[gidp];
+    p[threadIdx.x] = pressure[gid];
   }
   __syncthreads();
 
@@ -267,8 +267,8 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
     veloUpdate += scale*p[threadIdx.x-1];
     veloUpdate -= scale*p[threadIdx.x];
 
-    int gidv = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*volumeSize.y;
-    velo[gidv] = 1.0f;//veloUpdate;
+    gid = x + y*(volumeSize.x+1) + z*(volumeSize.x+1)*volumeSize.y;
+    velo[gid] = 1.0f;//veloUpdate;
   }
 }
 //==============================================================================
@@ -281,7 +281,41 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
 __global__
 void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
 {
+  int numBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
+  int numBlocksY = divUp(volumeSize.y-1, BLOCK_SIZE_Y);
+  int lx = threadIdx.x & (BLOCK_SIZE_X-1);
+  int ly = threadIdx.x/BLOCK_SIZE_X;
+  int bx = (blockIdx.x % numBlocksX)*BLOCK_SIZE_X;
+  int by = ((blockIdx.x / numBlocksX) % numBlocksY)*BLOCK_SIZE_Y;
+  int x = bx + lx;
+  int y = by + ly;
+  int z = blockIdx.x/(numBlocksX*numBlocksY);
+  __shared__ float p[BLOCK_SIZE_Y+1][BLOCK_SIZE_X];
+  int gid = x + y*volumeSize.x + z*volumeSize.x*volumeSize.y;
 
+  if (x < volumeSize.x && y < volumeSize.y-1) {
+
+    p[ly][lx] = pressure[gid];
+    if (ly == BLOCK_SIZE_Y-1 && y < volumeSize.y-1) {
+      p[BLOCK_SIZE_Y][lx] = pressure[gid+volumeSize.x];
+    }
+    else if (y == volumeSize.y-2) {
+      p[ly+1][lx] = pressure[gid+volumeSize.x];
+    }
+  }
+  __syncthreads();
+
+  if (x < volumeSize.x && y < volumeSize.y-1) {
+
+    float veloUpdate = tex3D(veloXTex, x+0.5f, y+1.0f+0.5f, z+0.5f);
+    float scale = -c_dt*c_rdx*c_rrho;
+
+    veloUpdate += scale*p[ly][lx];
+    veloUpdate -= scale*p[ly][lx];
+
+    gid = x + (y+1.0f)*volumeSize.x + z*volumeSize.x*(volumeSize.y+1);
+    velo[gid] = 1.0f;//veloUpdate;
+  }
 }
 //==============================================================================
 #if 0
@@ -341,8 +375,8 @@ void g_PressureUpdateX(float* pressure, dim3 volumeSize, float* velo)
 __global__
 void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
 {
-  int numThreadBlocksX = myDivUp(volumeSize.x, BLOCK_SIZE_X);
-  int numThreadBlocksY = myDivUp(volumeSize.y, BLOCK_SIZE_Y);
+  int numThreadBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
+  int numThreadBlocksY = divUp(volumeSize.y, BLOCK_SIZE_Y);
   int bIdx = blockIdx.x % numThreadBlocksX;
   int gx = bIdx * BLOCK_SIZE_X;
   int bIdy = ((blockIdx.x / numThreadBlocksX) % numThreadBlocksY);
@@ -400,8 +434,8 @@ void g_PressureUpdateY(float* pressure, dim3 volumeSize, float* velo)
 __global__
 void g_PressureUpdateZ(float* pressure, dim3 volumeSize, float* velo)
 {
-  int numThreadBlocksX = myDivUp(volumeSize.x, BLOCK_SIZE_X);
-  int numThreadBlocksZ = myDivUp(volumeSize.z, BLOCK_SIZE_Y);
+  int numThreadBlocksX = divUp(volumeSize.x, BLOCK_SIZE_X);
+  int numThreadBlocksZ = divUp(volumeSize.z, BLOCK_SIZE_Y);
   int bIdx = blockIdx.x % numThreadBlocksX;
   int gx = bIdx * BLOCK_SIZE_X;
   int bIdz = ((blockIdx.x / numThreadBlocksX) % numThreadBlocksZ);
@@ -452,7 +486,7 @@ void Compute::InitDye_kernel()
     (DataInfo->resolution[1])*
     (DataInfo->resolution[2]);
   int numThreads = 256;
-  int numBlocks = myDivUp(dyeSize, numThreads);
+  int numBlocks = divUp(dyeSize, numThreads);
 
   g_InitDye<<<numBlocks, numThreads>>>(Dye, VolumeSize);
 }
@@ -467,7 +501,7 @@ void Compute::InitVelocity_kernel()
     (DataInfo->resolution[1]+1)*
     (DataInfo->resolution[2]+1);
   int numThreads = 256;
-  int numBlocks = myDivUp(stagSize, numThreads);
+  int numBlocks = divUp(stagSize, numThreads);
 
   g_InitVelocity<<<numBlocks, numThreads>>>(VelocityX, VelocityY,
 					    VelocityZ, VolumeSize);
@@ -480,7 +514,7 @@ void Compute::AdvectDye_kernel()
     (DataInfo->resolution[1])*
     (DataInfo->resolution[2]);
   int numThreads = 256;
-  int numBlocks = myDivUp(numCells, numThreads);
+  int numBlocks = divUp(numCells, numThreads);
 
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
 
@@ -496,13 +530,13 @@ void Compute::AdvectVelocity_kernel()
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
 
   // X
-  numBlocks = myDivUp(NumCellFaces[0], numThreads);
+  numBlocks = divUp(NumCellFaces[0], numThreads);
   g_AdvectVelocity<<<numBlocks, numThreads>>>(VelocityX, VolumeSize, 0);
   // Y
-  numBlocks = myDivUp(NumCellFaces[1], numThreads);
+  numBlocks = divUp(NumCellFaces[1], numThreads);
   g_AdvectVelocity<<<numBlocks, numThreads>>>(VelocityY, VolumeSize, 1);
   // Z
-  numBlocks = myDivUp(NumCellFaces[2], numThreads);
+  numBlocks = divUp(NumCellFaces[2], numThreads);
   g_AdvectVelocity<<<numBlocks, numThreads>>>(VelocityZ, VolumeSize, 2);
 }
 //==============================================================================
@@ -512,13 +546,13 @@ void Compute::SetBoundaryConditions_kernel()
   int numBlocks;
 
   // X
-  numBlocks = myDivUp(NumCellFaces[0], numThreads);
+  numBlocks = divUp(NumCellFaces[0], numThreads);
   g_SetBoundaryConditions<<<numBlocks, numThreads>>>(VelocityX, VolumeSize, 0);
   // Y
-  numBlocks = myDivUp(NumCellFaces[1], numThreads);
+  numBlocks = divUp(NumCellFaces[1], numThreads);
   g_SetBoundaryConditions<<<numBlocks, numThreads>>>(VelocityY, VolumeSize, 1);
   // Z
-  numBlocks = myDivUp(NumCellFaces[2], numThreads);
+  numBlocks = divUp(NumCellFaces[2], numThreads);
   g_SetBoundaryConditions<<<numBlocks, numThreads>>>(VelocityZ, VolumeSize, 2);
 }
 //==============================================================================
@@ -574,7 +608,7 @@ void Compute::ComputeDivergence_kernel()
     (DataInfo->resolution[1])*
     (DataInfo->resolution[2]);
   int numThreads = 256;
-  int numBlocks = myDivUp(numCells, numThreads);
+  int numBlocks = divUp(numCells, numThreads);
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
 
   g_ComputeDivergence<<<numBlocks, numThreads>>>(Divergence, VolumeSize);
@@ -603,13 +637,13 @@ void Compute::PressureUpdate_kernel()
 
   // Y--------------------------------------------------------------------------
   numThreads = BLOCK_SIZE_X*BLOCK_SIZE_Y;
-  numBlocksX = myDivUp(DataInfo->resolution[0], BLOCK_SIZE_X);
-  numBlocksY = myDivUp(DataInfo->resolution[1]-1, BLOCK_SIZE_Y);
+  numBlocksX = divUp(DataInfo->resolution[0], BLOCK_SIZE_X);
+  numBlocksY = divUp(DataInfo->resolution[1]-1, BLOCK_SIZE_Y);
   numBlocks = numBlocksX*numBlocksY*(DataInfo->resolution[2]);
   g_PressureUpdateY<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityY);
 
   // Z--------------------------------------------------------------------------
-  // numBlocksZ = myDivUp(DataInfo->resolution[2]-1, BLOCK_SIZE_Y);
+  // numBlocksZ = divUp(DataInfo->resolution[2]-1, BLOCK_SIZE_Y);
   // numBlocks = numBlocksX*numBlocksZ*(DataInfo->resolution[1]);
   // g_PressureUpdateZ<<<numBlocks, numThreads>>>(Pressure, VolumeSize, VelocityZ);
 }
