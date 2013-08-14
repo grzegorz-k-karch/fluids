@@ -7,6 +7,12 @@ texture<float, cudaTextureType3D, cudaReadModeElementType> veloXTex;
 texture<float, cudaTextureType3D, cudaReadModeElementType> veloYTex;
 texture<float, cudaTextureType3D, cudaReadModeElementType> veloZTex;
 texture<float, cudaTextureType3D, cudaReadModeElementType> dyeTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCLeftTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCRightTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCBottomTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCTopTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCBackTex;
+texture<float, cudaTextureType2D, cudaReadModeElementType> BCFrontTex;
 
 __device__ __constant__ float c_dt;
 __device__ __constant__ float c_rdx;
@@ -59,7 +65,7 @@ void g_AdvectDye(float* dye, dim3 volumeSize)
 }
 //==============================================================================
 __global__
-void g_ComputeDivergence(float* divergence, dim3 volumeSize)
+void g_ComputeNegDivergence(float* divergence, dim3 volumeSize)
 {
   int gid = blockIdx.x*blockDim.x + threadIdx.x;
   int x = gid % volumeSize.x;
@@ -75,17 +81,17 @@ void g_ComputeDivergence(float* divergence, dim3 volumeSize)
 
     u0 = tex3D(veloXTex, pos.x, pos.y, pos.z);
     u1 = tex3D(veloXTex, pos.x+1.0f, pos.y, pos.z);
-    div += -c_rdx*(u1 - u0);
+    div += c_rdx*(u1 - u0);
 
     u0 = tex3D(veloYTex, pos.x, pos.y, pos.z);
     u1 = tex3D(veloYTex, pos.x, pos.y+1.0f, pos.z);
-    div += -c_rdx*(u1 - u0);
+    div += c_rdx*(u1 - u0);
 
     u0 = tex3D(veloZTex, pos.x, pos.y, pos.z);
     u1 = tex3D(veloZTex, pos.x, pos.y, pos.z+1.0f);
-    div += -c_rdx*(u1 - u0);
+    div += c_rdx*(u1 - u0);
 
-    divergence[gid] = div;
+    divergence[gid] = -div;
   }
 }
 //==============================================================================
@@ -466,6 +472,45 @@ void Compute::InitTextures()
   cudaBindTextureToArray(veloXTex, ca_VelocityX, channelDesc);
   cudaBindTextureToArray(veloYTex, ca_VelocityY, channelDesc);
   cudaBindTextureToArray(veloZTex, ca_VelocityZ, channelDesc);
+
+  // Boundary conditions
+  // Left
+  BCLeftTex.normalized = false;
+  BCLeftTex.filterMode = cudaFilterModePoint;
+  BCLeftTex.addressMode[0] = cudaAddressModeClamp;
+  BCLeftTex.addressMode[1] = cudaAddressModeClamp;
+  // Right
+  BCRightTex.normalized = false;
+  BCRightTex.filterMode = cudaFilterModePoint;
+  BCRightTex.addressMode[0] = cudaAddressModeClamp;
+  BCRightTex.addressMode[1] = cudaAddressModeClamp;
+  // Bottom
+  BCBottomTex.normalized = false;
+  BCBottomTex.filterMode = cudaFilterModePoint;
+  BCBottomTex.addressMode[0] = cudaAddressModeClamp;
+  BCBottomTex.addressMode[1] = cudaAddressModeClamp;
+  // Top
+  BCTopTex.normalized = false;
+  BCTopTex.filterMode = cudaFilterModePoint;
+  BCTopTex.addressMode[0] = cudaAddressModeClamp;
+  BCTopTex.addressMode[1] = cudaAddressModeClamp;
+  // Back
+  BCBackTex.normalized = false;
+  BCBackTex.filterMode = cudaFilterModePoint;
+  BCBackTex.addressMode[0] = cudaAddressModeClamp;
+  BCBackTex.addressMode[1] = cudaAddressModeClamp;
+  // Front
+  BCFrontTex.normalized = false;
+  BCFrontTex.filterMode = cudaFilterModePoint;
+  BCFrontTex.addressMode[0] = cudaAddressModeClamp;
+  BCFrontTex.addressMode[1] = cudaAddressModeClamp;
+
+  cudaBindTextureToArray(BCLeftTex, ca_BCLeft, channelDesc);
+  cudaBindTextureToArray(BCRightTex, ca_BCRight, channelDesc);
+  cudaBindTextureToArray(BCBottomTex, ca_BCBottom, channelDesc);
+  cudaBindTextureToArray(BCTopTex, ca_BCTop, channelDesc);
+  cudaBindTextureToArray(BCBackTex, ca_BCBack, channelDesc);
+  cudaBindTextureToArray(BCFrontTex, ca_BCFront, channelDesc);
 }
 //==============================================================================
 void Compute::InitSymbols()
@@ -480,7 +525,7 @@ void Compute::InitSymbols()
   				cudaMemcpyHostToDevice), __LINE__, __FILE__);
 }
 //==============================================================================
-void Compute::ComputeDivergence_kernel()
+void Compute::ComputeNegDivergence_kernel()
 {
   int numCells =
     (DataInfo->resolution[0])*
@@ -490,7 +535,7 @@ void Compute::ComputeDivergence_kernel()
   int numBlocks = divUp(numCells, numThreads);
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
 
-  g_ComputeDivergence<<<numBlocks, numThreads>>>(Divergence, VolumeSize);
+  g_ComputeNegDivergence<<<numBlocks, numThreads>>>(NegDivergence, VolumeSize);
 }
 //==============================================================================
 void Compute::SetTimestep(float dt)

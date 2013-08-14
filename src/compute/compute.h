@@ -27,13 +27,21 @@ class Compute {
   float *VelocityY;
   float *VelocityZ;
   float *Dye;
-  float *Divergence;
+  float *NegDivergence;
   float *Pressure;
 
   cudaArray *ca_VelocityX;
   cudaArray *ca_VelocityY;
   cudaArray *ca_VelocityZ;
   cudaArray *ca_Dye;
+
+  // Boundary conditions
+  cudaArray *ca_BCLeft;
+  cudaArray *ca_BCRight;
+  cudaArray *ca_BCBottom;
+  cudaArray *ca_BCTop;
+  cudaArray *ca_BCBack;
+  cudaArray *ca_BCFront;
 
   struct cudaGraphicsResource *VolumeResource;
 
@@ -45,7 +53,7 @@ class Compute {
   void AdvectDye();
   void AdvectVelocity();
   void SetBoundaryConditions();
-  void ComputeDivergence();
+  void ComputeNegDivergence();
   void PressureUpdate();
 
   //kernel wrappers-------------------------------------------------------------
@@ -55,7 +63,7 @@ class Compute {
   void AdvectDye_kernel();
   void AdvectVelocity_kernel();
   void SetBoundaryConditions_kernel();
-  void ComputeDivergence_kernel();
+  void ComputeNegDivergence_kernel();
   void PressureUpdate_kernel();
 
   //utilities-------------------------------------------------------------------

@@ -83,10 +83,23 @@ void Compute::InitData()
   myCudaCall(cudaMalloc3DArray(&ca_VelocityZ, &channelDesc, volumeSize),
 	     __LINE__, __FILE__);
   // Divergence
-  myCudaCall(cudaMalloc((void**)&Divergence, numCells*sizeof(float)), 
+  myCudaCall(cudaMalloc((void**)&NegDivergence, numCells*sizeof(float)), 
 	     __LINE__, __FILE__);
   // Pressure
   myCudaCall(cudaMalloc((void**)&Pressure, numCells*sizeof(float)), 
+	     __LINE__, __FILE__);
+  // Boundary conditions
+  myCudaCall(cudaMallocArray(&ca_BCLeft, &channelDesc, res[1], res[2]),
+	     __LINE__, __FILE__);
+  myCudaCall(cudaMallocArray(&ca_BCRight, &channelDesc, res[1], res[2]),
+	     __LINE__, __FILE__);
+  myCudaCall(cudaMallocArray(&ca_BCBottom, &channelDesc, res[0], res[2]),
+	     __LINE__, __FILE__);
+  myCudaCall(cudaMallocArray(&ca_BCTop, &channelDesc, res[0], res[2]),
+	     __LINE__, __FILE__);
+  myCudaCall(cudaMallocArray(&ca_BCBack, &channelDesc, res[0], res[1]),
+	     __LINE__, __FILE__);
+  myCudaCall(cudaMallocArray(&ca_BCFront, &channelDesc, res[0], res[1]),
 	     __LINE__, __FILE__);
 }
 //==============================================================================
@@ -152,7 +165,7 @@ void Compute::Update()
 {
   SetTimestep(ComputeTimestep());
   //  SetBoundaryConditions();
-  ComputeDivergence();
+  ComputeNegDivergence();
   // //Projection();
   PressureUpdate();
   AdvectDye();
@@ -185,9 +198,9 @@ void Compute::CopyCudaArray(cudaArray* ca, int res[3], float* dst)
   cudaMemcpy3D(copyParams);  
 }
 //==============================================================================
-void Compute::ComputeDivergence()
+void Compute::ComputeNegDivergence()
 {
-  ComputeDivergence_kernel();
+  ComputeNegDivergence_kernel();
 }
 //==============================================================================
 float Compute::ComputeTimestep()
@@ -247,3 +260,6 @@ void Compute::PressureUpdate()
   UpdateCudaArray(ca_VelocityY, Res[1], VelocityY);
   UpdateCudaArray(ca_VelocityZ, Res[2], VelocityZ);
 }
+// TODO: implement boundary conditions in textures
+// TODO: modify rhs to account solid velocities
+// TODO: build matrix A
