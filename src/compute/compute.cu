@@ -40,6 +40,9 @@ void Compute::Init(dataInfo_t* dataInfo)
   Res[2][0] = DataInfo->resolution[0];
   Res[2][1] = DataInfo->resolution[1];
   Res[2][2] = DataInfo->resolution[2]+1;
+  Res[3][0] = DataInfo->resolution[0];
+  Res[3][1] = DataInfo->resolution[1];
+  Res[3][2] = DataInfo->resolution[2];
 
   VolumeSize.x = DataInfo->resolution[0];
   VolumeSize.y = DataInfo->resolution[1];
@@ -159,6 +162,71 @@ void Compute::AdvectVelocity()
 void Compute::SetBoundaryConditions()
 {
   SetBoundaryConditions_kernel();
+
+  float *velobc;
+  int count;
+
+  count = Res[3][1]*Res[3][2];
+  velobc = new float[count];
+
+  for (int k = 0; k < Res[3][2]; k++) {
+    for (int j = 0; j < Res[3][1]; j++) {
+
+      int idx = j + k*Res[3][1];
+      if (j > Res[3][1]/4 && j < Res[3][1]*3/4 &&
+  	  k > Res[3][2]/4 && k < Res[3][2]*3/4 ) {
+  	velobc[idx] = 1.0f;
+      }
+      else {
+  	velobc[idx] = 0.0f;
+      }
+    }
+  }  
+  myCudaCall(cudaMemcpyToArray(ca_BCLeft, 0, 0, velobc, count, 
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+
+  for (int k = 0; k < Res[3][2]; k++) {
+    for (int j = 0; j < Res[3][1]; j++) {
+
+      int idx = j + k*Res[3][1];
+      velobc[idx] = 0.0f;     
+    }
+  }  
+  myCudaCall(cudaMemcpyToArray(ca_BCRight, 0, 0, velobc, count,
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+  delete [] velobc;
+
+  count = Res[3][0]*Res[3][2];
+  velobc = new float[count];
+
+  for (int k = 0; k < Res[3][2]; k++) {
+    for (int i = 0; i < Res[3][0]; i++) {
+
+      int idx = i + k*Res[3][0];
+      velobc[idx] = 0.0f;
+    }
+  }  
+  myCudaCall(cudaMemcpyToArray(ca_BCBottom, 0, 0, velobc, count,
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+  myCudaCall(cudaMemcpyToArray(ca_BCTop, 0, 0, velobc, count,
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+  delete [] velobc;
+
+  count = Res[3][0]*Res[3][1];
+  velobc = new float[count];
+
+  for (int j = 0; j < Res[3][1]; j++) {
+    for (int i = 0; i < Res[3][0]; i++) {
+
+      int idx = i + j*Res[3][0];
+      velobc[idx] = 0.0f;
+    }
+  }  
+  myCudaCall(cudaMemcpyToArray(ca_BCBottom, 0, 0, velobc, count,
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+  myCudaCall(cudaMemcpyToArray(ca_BCTop, 0, 0, velobc, count,
+			       cudaMemcpyHostToDevice), __LINE__, __FILE__);
+  delete [] velobc;
 }
 //==============================================================================
 void Compute::Update()
@@ -167,7 +235,7 @@ void Compute::Update()
   //  SetBoundaryConditions();
   ComputeNegDivergence();
   // //Projection();
-  PressureUpdate();
+  // PressureUpdate();
   AdvectDye();
   AdvectVelocity();
 }

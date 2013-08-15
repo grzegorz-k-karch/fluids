@@ -20,7 +20,7 @@ class Compute {
  private:
 
   int NumCellFaces[3];
-  int Res[3][3];
+  int Res[4][3];
   dim3 VolumeSize;
   dataInfo_t *DataInfo;
   float *VelocityX;

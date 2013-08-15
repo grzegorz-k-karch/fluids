@@ -120,7 +120,9 @@ void g_SetBoundaryConditions(float* velo, dim3 volumeSize, int dir)
   int numCells = nfx*nfy*nfz;
 
   if (gid < numCells) {
+
     switch (dir) {
+
     case 0: // X faces
       if (x == 0) {
 	if (y > nfy/4 && y < nfy*3/4 && z > nfz/4 && nfz < nfz*3/4) {
